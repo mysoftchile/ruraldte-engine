@@ -47,6 +47,33 @@ cero**. Lo abrimos porque el protocolo del SII no debería ser el peaje de nadie
 
 ## Instalación
 
+### Boletas 39/41: compatibilidad APR
+
+La ampliación del 2026-10-19 agrega `indMntNeto?: 2` solo para 39,
+`receptor.cmnaRecep`, `totals.montoNF` y `totals.totalPeriodo`.
+Los dos totales son enteros seguros con signo: se conservan ausencia y cero.
+`items[].indExe` admite 1 (exento/no afecto) o 2 (no facturable), excluyente
+con `exento` incluso si este es false. El booleano heredado conserva su significado.
+
+`items[].montoItem` permite un entero seguro no negativo explícito. Esa rama
+conserva cantidad, unidad y precio presentes (hasta seis decimales para precio
+y cantidad), sin completar ausencias ni redondear el precio a entero. Sin monto
+explícito se conserva `round(precio * cantidad)` y el precio entero heredado.
+Los precios y movimientos globales afectos son netos con `indMntNeto=2`;
+sin el indicador son brutos. No se convierte entre modalidades.
+
+Los totales finales siguen a cargo del llamador: no se concilian ni corrigen,
+y el TED usa `totals.total`, no `totalPeriodo`. No se habilitan detalle 6,
+descuentos/recargos de línea, espectáculos ni nuevas operaciones SII.
+Los límites seguros de JavaScript son cobertura de transporte, no máximos SII.
+
+Fuentes: [Formato boletas SII v4.2, 2025-09-08](https://www.sii.cl/factura_electronica/factura_mercado/formato_boleta_electronica.pdf),
+pp.9 y 11–17; [XSD oficial EnvioBOLETA](https://www.sii.cl/factura_electronica/factura_mercado/schema_envio_bol.zip)
+vendorizado sin modificación en `engine/xsd/EnvioBOLETA_v11.xsd`.
+Las pruebas locales de firma/XSD no certifican aceptación real del SII.
+Para ejecutar las pruebas XSD en Windows sin xmllint, `XSD_PYTHON` puede apuntar
+a un Python con lxml; `XSD_REQUIRED=1` exige un validador disponible.
+
 ```ts
 // Deno / JSR
 import { buildSignedFacturaDte } from "jsr:@ruraldte/engine";

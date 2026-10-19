@@ -11,8 +11,9 @@
  * `<Documento>` por `URI="#ID"`. El módulo no calcula ni cuadra los totales: `totals` lo
  * pasas ya cuadrado, incluidos los descuentos/recargos globales, y solo se omiten los
  * componentes que no son > 0; de cada ítem deriva
- * `PrcItem = round(precio)` y `MontoItem = round(precio * cantidad)` — en boleta el
- * `precio` es BRUTO, con IVA incluido — y trunca EN SILENCIO los textos al largo del XSD
+ * `PrcItem = round(precio)` y `MontoItem = round(precio * cantidad)` en la rama heredada.
+ * Con montoItem explícito conserva precio/cantidad presentes y su precisión, sin defaults.
+ * El precio es BRUTO, salvo indMntNeto=2 (neto, solo 39). Trunca los textos heredados al largo del XSD
  * (razón social 100, giro 80, dirección 70, comuna 20, nombre del ítem 80). Dos trampas:
  * lanza si `items` viene vacío o si `documentId` no es un `xs:ID` válido (parte con letra
  * o `_`, nunca con dígito), y el RUT del receptor se normaliza en un solo punto para que
@@ -109,19 +110,23 @@ function normRut(rut: string): string {
 }
 
 /**
- * Línea del `<Detalle>` de la boleta. De acá salen `PrcItem = round(precio)` y
- * `MontoItem = round(precio * cantidad)` —en boleta el precio va BRUTO, con IVA
- * incluido cuando la línea es afecta— y `nombre` se trunca a 80 caracteres sin avisar.
+ * Línea del `<Detalle>`. Sin montoItem se requieren precio/cantidad y se conserva el
+ * redondeo heredado. Con monto explícito ambos son opcionales y se emiten sin redondeo.
+ * El precio es bruto salvo indMntNeto=2; nombre conserva su truncamiento a 80 caracteres.
  */
 export type BoletaDteItem = {
   nombre: string;
-  cantidad: number;
-  /** Precio unitario bruto (con IVA si afecta), pesos enteros. */
-  precio: number;
+  cantidad?: number;
+  /** Bruto, o neto si indMntNeto=2. La rama heredada lo redondea a entero. */
+  precio?: number;
+  /** Entero no negativo explícito; conserva precio/cantidad presentes, sin derivarlos. */
+  montoItem?: number;
   /** Unidad de medida; el oráculo de calibración emite "un" por defecto. */
   unidadMedida?: string;
   /** true = línea exenta (agrega IndExe=1). */
   exento?: boolean;
+  /** 1 = exento/no afecto; 2 = no facturable. Excluyente con exento, incluso false. */
+  indExe?: 1 | 2;
 };
 
 /**
@@ -134,13 +139,16 @@ export type BoletaDteTotals = {
   iva: number;
   exento: number;
   total: number;
+  /** Enteros con signo; se conservan ausencia y cero, sin conciliación automática. */
+  montoNF?: number;
+  totalPeriodo?: number;
 };
 
 /** Descuento o recargo global de boleta (Formato SII v4.2 §D). */
 export type BoletaDscRcgGlobal = {
   /** "D" = descuento · "R" = recargo. */
   tipo: "D" | "R";
-  /** "%" = porcentaje · "$" = monto en pesos; en boleta los montos afectos son brutos. */
+  /** "%" = porcentaje · "$" = pesos; afectos netos con indMntNeto=2, brutos sin él. */
   valorTipo: "%" | "$";
   /** Positivo, hasta dos decimales, representable con precisión segura en centésimas. */
   valor: number;
@@ -192,6 +200,8 @@ export type BoletaDteInput = {
    * 4=Espectáculo por terceros.
    */
   indServicio: 1 | 2 | 3 | 4;
+  /** Solo boleta 39: 2 indica precios y montos de detalle netos. Ausente = brutos. */
+  indMntNeto?: 2;
   /** AAAA-MM-DD. Obligatorio si indServicio=2 (devengo IVA al vencimiento). */
   fchVenc?: string;
   /** Servicios periódicos: inicio/fin del período facturado (AAAA-MM-DD). */
@@ -211,6 +221,7 @@ export type BoletaDteInput = {
     cdgIntRecep?: string;
     /** Dirección del servicio. Obligatoria si indServicio=1 o 2. */
     dirRecep?: string;
+    cmnaRecep?: string;
   };
   items: BoletaDteItem[];
   /** Totales finales, ya ajustados por descuentos y recargos globales. */
@@ -251,6 +262,7 @@ function buildEncabezado(input: BoletaDteInput): string {
     el("FchEmis", input.fechaEmision),
     el("IndServicio", input.indServicio),
   ];
+  if (input.indMntNeto !== undefined) idParts.push(el("IndMntNeto", input.indMntNeto));
   if (input.periodoDesde) idParts.push(el("PeriodoDesde", input.periodoDesde));
   if (input.periodoHasta) idParts.push(el("PeriodoHasta", input.periodoHasta));
   if (input.fchVenc) idParts.push(el("FchVenc", input.fchVenc));
@@ -268,6 +280,7 @@ function buildEncabezado(input: BoletaDteInput): string {
   if (receptor.cdgIntRecep) recParts.push(el("CdgIntRecep", receptor.cdgIntRecep.slice(0, 20)));
   if (receptor.razonSocial) recParts.push(el("RznSocRecep", receptor.razonSocial.slice(0, 100)));
   if (receptor.dirRecep) recParts.push(el("DirRecep", receptor.dirRecep.slice(0, 70)));
+  if (receptor.cmnaRecep !== undefined) recParts.push(el("CmnaRecep", receptor.cmnaRecep));
   const receptorXml = `<Receptor>${recParts.join("")}</Receptor>`;
   // Totales orden XSD: MntNeto, MntExe, IVA, MntTotal. Afecta (39)=Neto+IVA;
   // exenta (41)=MntExe. IVA es MntImpType (>0): se omite si 0 (no <IVA>0</IVA>).
@@ -276,28 +289,57 @@ function buildEncabezado(input: BoletaDteInput): string {
   if (totals.exento > 0) totalesParts.push(el("MntExe", totals.exento));
   if (totals.iva > 0) totalesParts.push(el("IVA", totals.iva));
   totalesParts.push(el("MntTotal", totals.total));
+  if (totals.montoNF !== undefined) totalesParts.push(el("MontoNF", totals.montoNF));
+  if (totals.totalPeriodo !== undefined) totalesParts.push(el("TotalPeriodo", totals.totalPeriodo));
   const totalesXml = `<Totales>${totalesParts.join("")}</Totales>`;
   return `<Encabezado>${idDoc}${emisorXml}${receptorXml}${totalesXml}</Encabezado>`;
 }
 
 /**
- * `MontoItem` de una línea de boleta: `round(precio × cantidad)`. La boleta no lleva descuentos
- * ni recargos de línea, así que su cuenta NO es la de la factura (`montosDeLinea`). Es la ÚNICA
- * implementación: `buildDetalle` emite desde acá y la representación impresa la importa en vez
- * de replicarla.
+ * Conserva el monto explícito seguro o deriva `round(precio × cantidad)` en la rama
+ * heredada. No concilia la fórmula ni aplica descuentos o recargos de línea.
  */
-export function montoItemBoleta(item: Pick<BoletaDteItem, "precio" | "cantidad">): number {
+export function montoItemBoleta(item: Pick<BoletaDteItem, "precio" | "cantidad" | "montoItem">): number {
+  if (item.montoItem !== undefined) {
+    if (!Number.isSafeInteger(item.montoItem) || item.montoItem < 0) {
+      throw new Error("montoItemBoleta: montoItem debe ser un entero seguro no negativo");
+    }
+    return item.montoItem;
+  }
+  if (item.precio === undefined || item.cantidad === undefined) {
+    throw new Error("montoItemBoleta: sin montoItem se requieren precio y cantidad");
+  }
   return Math.round(item.precio * item.cantidad);
 }
 
 function buildDetalle(item: BoletaDteItem, nroLinea: number): string {
   const parts: string[] = [];
   parts.push(el("NroLinDet", nroLinea));
-  if (item.exento) parts.push(el("IndExe", 1));
+  if (item.indExe !== undefined && (item.indExe !== 1 && item.indExe !== 2)) {
+    throw new Error("buildDetalle: indExe debe ser 1 o 2");
+  }
+  if (item.indExe !== undefined && item.exento !== undefined) {
+    throw new Error("buildDetalle: indExe y exento son excluyentes");
+  }
+  if (item.indExe !== undefined) parts.push(el("IndExe", item.indExe));
+  else if (item.exento) parts.push(el("IndExe", 1));
   parts.push(el("NmbItem", item.nombre.slice(0, 80)));
-  parts.push(el("QtyItem", item.cantidad));
-  parts.push(el("UnmdItem", item.unidadMedida ?? "un"));
-  parts.push(el("PrcItem", Math.round(item.precio)));
+  if (item.montoItem !== undefined) {
+    for (const field of ["cantidad", "precio"] as const) {
+      const value = item[field];
+      if (value !== undefined && (!Number.isFinite(value) || value <= 0 ||
+        !/^\d{1,12}(?:\.\d{1,6})?$/.test(String(value)))) {
+        throw new Error(`buildDetalle: ${field} requiere hasta 12 enteros y 6 decimales positivos`);
+      }
+    }
+    if (item.cantidad !== undefined) parts.push(el("QtyItem", item.cantidad));
+    if (item.unidadMedida !== undefined) parts.push(el("UnmdItem", item.unidadMedida));
+    if (item.precio !== undefined) parts.push(el("PrcItem", item.precio));
+  } else {
+    if (item.cantidad !== undefined) parts.push(el("QtyItem", item.cantidad));
+    parts.push(el("UnmdItem", item.unidadMedida ?? "un"));
+    if (item.precio !== undefined) parts.push(el("PrcItem", Math.round(item.precio)));
+  }
   parts.push(el("MontoItem", montoItemBoleta(item)));
   return `<Detalle>${parts.join("")}</Detalle>`;
 }
@@ -372,6 +414,19 @@ function buildTedCompact(input: BoletaDteInput): string {
  * agrega el ensamblador del DTE con `xml-signature.ts` (paso siguiente).
  */
 export function buildBoletaDocumento(input: BoletaDteInput): BuildBoletaDocumentoResult {
+  if (input.indMntNeto !== undefined && (input.tipoDte !== 39 || input.indMntNeto !== 2)) {
+    throw new Error("buildBoletaDocumento: indMntNeto solo admite 2 en boleta 39");
+  }
+  for (const field of ["montoNF", "totalPeriodo"] as const) {
+    if (input.totals[field] !== undefined && !Number.isSafeInteger(input.totals[field])) {
+      throw new Error(`buildBoletaDocumento: ${field} debe ser un entero seguro con signo`);
+    }
+  }
+  if (input.receptor.cmnaRecep !== undefined &&
+    (typeof input.receptor.cmnaRecep !== "string" || input.receptor.cmnaRecep.length === 0 ||
+      input.receptor.cmnaRecep.length > 20 || sanitizeSiiText(input.receptor.cmnaRecep).length > 20)) {
+    throw new Error("buildBoletaDocumento: cmnaRecep debe tener entre 1 y 20 caracteres Latin-1");
+  }
   if (input.items.length === 0) throw new Error("buildBoletaDocumento: sin ítems");
   if (input.descuentosGlobales !== undefined && !Array.isArray(input.descuentosGlobales)) {
     throw new Error("buildBoletaDocumento: descuentosGlobales debe ser un arreglo");

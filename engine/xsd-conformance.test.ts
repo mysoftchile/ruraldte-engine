@@ -19,6 +19,9 @@
 
 import { assert, assertStringIncludes } from "jsr:@std/assert@1";
 import forge from "npm:node-forge@1.3.1";
+import { fileURLToPath } from "node:url";
+import { buildSignedBoletaDte, type BoletaDteInput } from "./boleta-dte.ts";
+import { buildEnvioBoleta } from "./envio-boleta.ts";
 import { buildSignedFacturaDte, type FacturaDteInput } from "./factura-dte.ts";
 import { buildCertFacturaDtes, DEFAULT_FACTURA_CERT_RECEPTOR, EXPORT_CERT_CASES } from "./cert-factura.ts";
 import { buildEnvioDte } from "./envio-dte.ts";
@@ -118,12 +121,56 @@ async function hasXmllint(): Promise<boolean> {
 }
 
 const HAS_XMLLINT = await hasXmllint();
+// Alternativa local explícita para Windows sin xmllint; Python debe tener lxml.
+const XSD_PYTHON = Deno.env.get("XSD_PYTHON");
+
+Deno.test({
+  name: "EnvioBOLETA APR 39/41: netos/brutos, precisión y no facturables validan XSD oficial",
+  ignore: !HAS_XMLLINT && !XSD_PYTHON,
+  fn: async () => {
+    const pfx = makeTestPfx();
+    const base: BoletaDteInput = {
+      tipoDte: 39, folio: 1, fechaEmision: "2026-10-01", indServicio: 2,
+      indMntNeto: 2, periodoDesde: "2026-09-01", periodoHasta: "2026-09-30", fchVenc: "2026-10-20",
+      emisor: EMISOR, receptor: { ...RECEPTOR, cmnaRecep: "Santiago" },
+      items: [
+        { nombre: "Agua", cantidad: 1, precio: 10000, montoItem: 10000 },
+        { nombre: "Exento", montoItem: 2000, indExe: 1 },
+        { nombre: "No facturable", montoItem: 500, indExe: 2 },
+      ],
+      totals: { neto: 10000, iva: 1900, exento: 2000, total: 13900, montoNF: 500, totalPeriodo: 14400 },
+      documentId: "APR_1", cafXml: genCafXml(39),
+      tstedIso: "2026-10-01T12:00:00", tmstFirma: "2026-10-01T12:00:00",
+    };
+    const cases: BoletaDteInput[] = [
+      base,
+      { ...base, indMntNeto: undefined,
+        items: [{ nombre: "Bruto", cantidad: 1, precio: 11900, montoItem: 11900 }],
+        totals: { neto: 10000, iva: 1900, exento: 0, total: 11900 } },
+      { ...base, items: [{ nombre: "Medición", cantidad: 2.5, precio: 400.4, montoItem: 1001 }],
+        totals: { neto: 1001, iva: 190, exento: 0, total: 1191, montoNF: 0, totalPeriodo: 1191 } },
+      { ...base, tipoDte: 41, indMntNeto: undefined, cafXml: genCafXml(41),
+        items: [{ nombre: "Exento", montoItem: 10000, indExe: 1 }, { nombre: "No facturable", montoItem: 500, indExe: 2 }],
+        descuentosGlobales: [{ tipo: "D", valorTipo: "$", valor: 1000, exento: 1 }],
+        totals: { neto: 0, iva: 0, exento: 9000, total: 9000, montoNF: 500, totalPeriodo: 9500 } },
+    ];
+    for (const input of cases) {
+      const sobre = buildEnvioBoleta({
+        setId: "SET_APR_XSD", signedDtes: [buildSignedBoletaDte(input, pfx, "pass")],
+        caratula: { rutEmisor: EMISOR.rut, rutEnvia: "22222222-2", rutReceptor: "60803000-K",
+          fchResol: "2026-06-08", nroResol: 0, tmstFirmaEnv: "2026-10-01T12:00:00" },
+        pfxBytes: pfx, password: "pass",
+      });
+      await validarContraXsd(sobre.xml, "EnvioBOLETA_v11.xsd");
+    }
+  },
+});
 
 // El skip existe para la máquina de un dev sin libxml. En CI NO: un gate que se saltea en
 // silencio es un gate que no chequea, y lo que valida este archivo es el XML que recibe el
 // SII. Con XSD_REQUIRED=1 la ausencia de xmllint —o la falta de --allow-run, que desde acá
 // se ve igual— es un error ruidoso en vez de tres tests "ignored" y un ✓ verde.
-if (!HAS_XMLLINT && Deno.env.get("XSD_REQUIRED") === "1") {
+if (!HAS_XMLLINT && !XSD_PYTHON && Deno.env.get("XSD_REQUIRED") === "1") {
   throw new Error(
     "XSD_REQUIRED=1 pero xmllint no respondió: instala libxml2-utils y corre los tests con " +
       "--allow-run. El gate XSD no se saltea en CI.",
@@ -149,18 +196,21 @@ function envio(signedDtes: Parameters<typeof buildEnvioDte>[0]["signedDtes"], pf
 }
 
 /** xmllint del sobre (bytes ISO-8859-1 reales) contra EnvioDTE_v10.xsd v2.5. */
-async function validarContraXsd(xml: string): Promise<void> {
+async function validarContraXsd(xml: string, schema = "EnvioDTE_v10.xsd"): Promise<void> {
   const xmlPath = await Deno.makeTempFile({ prefix: "ruraldte_envio_", suffix: ".xml" });
-  const xsdPath = new URL("./xsd/EnvioDTE_v10.xsd", import.meta.url).pathname;
+  const xsdPath = fileURLToPath(new URL(`./xsd/${schema}`, import.meta.url));
   try {
     await Deno.writeFile(xmlPath, toLatin1(xml));
-    const { code, stderr } = await new Deno.Command("xmllint", {
-      args: ["--noout", "--schema", xsdPath, xmlPath],
+    const { code, stderr } = await new Deno.Command(HAS_XMLLINT ? "xmllint" : XSD_PYTHON!, {
+      args: HAS_XMLLINT ? ["--noout", "--schema", xsdPath, xmlPath] : [
+        "-c", "import sys; from lxml import etree; etree.XMLSchema(file=sys.argv[1]).assertValid(etree.parse(sys.argv[2]))",
+        xsdPath, xmlPath,
+      ],
       stdout: "null",
       stderr: "piped",
     }).output();
     const err = new TextDecoder().decode(stderr);
-    assert(code === 0, `xmllint reprobó el EnvioDTE contra el XSD v2.5:\n${err}`);
+    assert(code === 0, `Validación contra ${schema} falló:\n${err}`);
   } finally {
     await Deno.remove(xmlPath).catch(() => {});
   }
@@ -168,7 +218,7 @@ async function validarContraXsd(xml: string): Promise<void> {
 
 Deno.test({
   name: "EnvioDTE (33/34/56/61 firmados) valida contra los XSD v2.5 del SII",
-  ignore: !HAS_XMLLINT,
+  ignore: !HAS_XMLLINT && !XSD_PYTHON,
   fn: async () => {
     const pfx = makeTestPfx();
 
@@ -211,7 +261,7 @@ Deno.test({
 // Exportaciones —MontoItem 1098.9 / 1348.5— y el SII la rechazaba con el folio ya consumido.
 Deno.test({
   name: "familia comercial (33): descuento/recargo % de monto fraccionario → Detalle en pesos enteros, valida contra el XSD",
-  ignore: !HAS_XMLLINT,
+  ignore: !HAS_XMLLINT && !XSD_PYTHON,
   fn: async () => {
     const pfx = makeTestPfx();
     const f33: FacturaDteInput = {
@@ -238,7 +288,7 @@ Deno.test({
 // porque 9.4 no es MntImpType— y eso tiene que seguir saliendo igual y válido.
 Deno.test({
   name: "subtipo Exportaciones (set de cert): el recargo % fraccionario queda en un MontoItem decimal y valida contra el XSD",
-  ignore: !HAS_XMLLINT,
+  ignore: !HAS_XMLLINT && !XSD_PYTHON,
   fn: async () => {
     const pfx = makeTestPfx();
     const dtes = buildCertFacturaDtes({

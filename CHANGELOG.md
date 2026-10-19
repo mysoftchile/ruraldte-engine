@@ -3,6 +3,19 @@
 Formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) ·
 Versionado [SemVer](https://semver.org/lang/es/).
 
+## [Unreleased] — 2026-10-19
+
+### Añadido
+- Boletas: indicador neto 2 para 39, indicador de detalle 1/2 excluyente con
+  `exento`, comuna del receptor, monto no facturable y total del período.
+- Monto explícito de detalle sin perder precio/cantidad ni su precisión; rama
+  heredada compatible. No calcula impuestos ni concilia totales.
+- Pruebas sintéticas de firma/TED y EnvioBOLETA contra XSD oficial. Validación
+  XSD local opcional mediante Python/lxml y rutas Windows corregidas.
+
+La revisión se identifica por su SHA; el manifest 0.5.0 no prueba cobertura de
+estas capacidades. Sin habilitar indicador 6 ni descuentos de línea.
+
 ## [0.5.0] — 2026-09-20
 
 ### Quitado
