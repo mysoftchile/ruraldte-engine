@@ -407,3 +407,111 @@ Deno.test("DscRcgGlobal: firma cubre los movimientos y TED usa el total final en
     assert(digest !== sha1Base64(alterado), "los movimientos deben quedar cubiertos por el digest");
   }
 });
+
+Deno.test("boleta APR: netos, comuna, exentos/no facturables y totales sin recalcular", () => {
+  const input = caso1Input();
+  input.indMntNeto = 2;
+  input.indServicio = 2;
+  input.periodoDesde = "2026-09-01";
+  input.periodoHasta = "2026-09-30";
+  input.fchVenc = "2026-10-20";
+  input.receptor = { rut: "11111111-1", dirRecep: "Calle de prueba 1", cmnaRecep: "Comuna & Prueba" };
+  input.items = [
+    { nombre: "Agua", precio: 10000, cantidad: 1, montoItem: 10000 },
+    { nombre: "Exento", montoItem: 2000, indExe: 1 },
+    { nombre: "No facturable", montoItem: 500, indExe: 2 },
+  ];
+  input.totals = { neto: 10000, iva: 1900, exento: 2000, total: 13900, montoNF: 500, totalPeriodo: 14400 };
+  const { documento } = buildBoletaDocumento(input);
+  assertStringIncludes(documento, "<IndServicio>2</IndServicio><IndMntNeto>2</IndMntNeto><PeriodoDesde>");
+  assertStringIncludes(documento, "<DirRecep>Calle de prueba 1</DirRecep><CmnaRecep>Comuna &amp; Prueba</CmnaRecep>");
+  assertStringIncludes(documento, "<MntTotal>13900</MntTotal><MontoNF>500</MontoNF><TotalPeriodo>14400</TotalPeriodo>");
+  assertStringIncludes(documento, "<NroLinDet>3</NroLinDet><IndExe>2</IndExe><NmbItem>No facturable</NmbItem><MontoItem>500</MontoItem>");
+  assertStringIncludes(documento, "<MNT>13900</MNT>");
+  // El constructor conserva datos contradictorios: no es un conciliador de facturación.
+  input.totals.totalPeriodo = 0;
+  input.totals.montoNF = -100;
+  const signedTotals = buildBoletaDocumento(input).documento;
+  assertStringIncludes(signedTotals, "<MontoNF>-100</MontoNF><TotalPeriodo>0</TotalPeriodo>");
+  delete input.totals.montoNF;
+  delete input.totals.totalPeriodo;
+  const absent = buildBoletaDocumento(input).documento;
+  assert(!absent.includes("<MontoNF>") && !absent.includes("<TotalPeriodo>"));
+});
+
+Deno.test("MontoItem explícito conserva decimales y ausencias; heredado no cambia", () => {
+  const input = caso1Input();
+  input.items = [{ nombre: "Medición", cantidad: 2.5, precio: 400.4, montoItem: 1001 }];
+  assertStringIncludes(buildBoletaDocumento(input).documento,
+    "<QtyItem>2.5</QtyItem><PrcItem>400.4</PrcItem><MontoItem>1001</MontoItem>");
+  assertEquals(montoItemBoleta(input.items[0]), 1001);
+  input.items = [{ nombre: "Sin cantidad ni precio", montoItem: 0 }];
+  const zero = buildBoletaDocumento(input).documento;
+  assertStringIncludes(zero, "<NmbItem>Sin cantidad ni precio</NmbItem><MontoItem>0</MontoItem>");
+  assert(!zero.includes("<QtyItem>") && !zero.includes("<PrcItem>") && !zero.includes("<UnmdItem>"));
+  input.items = [{ nombre: "Heredado", cantidad: 2.5, precio: 400.4, exento: false }];
+  const legacy = buildBoletaDocumento(input).documento;
+  assertStringIncludes(legacy, "<QtyItem>2.5</QtyItem><UnmdItem>un</UnmdItem><PrcItem>400</PrcItem><MontoItem>1001</MontoItem>");
+  assert(!legacy.includes("<IndExe>"));
+  input.items[0].exento = true;
+  assertStringIncludes(buildBoletaDocumento(input).documento, "<IndExe>1</IndExe>");
+});
+
+Deno.test("boleta APR rechaza indicadores incompatibles y nuevos números inválidos", () => {
+  const input = caso1Input();
+  assertThrows(() => buildBoletaDocumento({ ...input, tipoDte: 41, indMntNeto: 2 }), Error, "indMntNeto");
+  assertThrows(() => buildBoletaDocumento({ ...input, indMntNeto: 1 as 2 }), Error, "indMntNeto");
+  for (const exento of [false, true]) {
+    assertThrows(() => buildBoletaDocumento({ ...input,
+      items: [{ nombre: "Inválido", montoItem: 1, indExe: 1, exento }] }), Error, "excluyentes");
+  }
+  for (const indExe of [0, 3, 6]) {
+    assertThrows(() => buildBoletaDocumento({ ...input,
+      items: [{ nombre: "Inválido", montoItem: 1, indExe: indExe as 1 }] }), Error, "indExe");
+  }
+  for (const montoItem of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assertThrows(() => montoItemBoleta({ montoItem }), Error, "entero seguro");
+  }
+  for (const field of ["montoNF", "totalPeriodo"] as const) {
+    for (const value of [0.1, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      assertThrows(() => buildBoletaDocumento({ ...input, totals: { ...input.totals, [field]: value } }), Error, field);
+    }
+  }
+  for (const field of ["cantidad", "precio"] as const) {
+    for (const value of [0, -1, Infinity, 0.0000001, 1e12]) {
+      assertThrows(() => buildBoletaDocumento({ ...input,
+        items: [{ nombre: "Inválido", montoItem: 1, [field]: value }] }), Error, field);
+    }
+  }
+  assertThrows(() => buildBoletaDocumento({ ...input,
+    receptor: { ...input.receptor, cmnaRecep: "A".repeat(21) } }), Error, "cmnaRecep");
+  assertStringIncludes(buildBoletaDocumento({ ...input,
+    receptor: { ...input.receptor, cmnaRecep: "A".repeat(20) } }).documento, "<CmnaRecep>");
+});
+
+Deno.test("boletas APR 39/41: globales, nuevos campos y TED quedan firmados", () => {
+  const { pfxBytes, publicKey } = makeTestPfx();
+  for (const tipoDte of [39, 41] as const) {
+    const input = caso1Input();
+    input.tipoDte = tipoDte;
+    input.cafXml = genCafXml(tipoDte);
+    input.indMntNeto = tipoDte === 39 ? 2 : undefined;
+    input.items = [
+      { nombre: "Servicio", precio: 10000, cantidad: 1, montoItem: 10000, indExe: tipoDte === 41 ? 1 : undefined },
+      { nombre: "No facturable", montoItem: 500, indExe: 2 },
+    ];
+    input.descuentosGlobales = [{ tipo: "D", valorTipo: "$", valor: 1000, exento: tipoDte === 41 ? 1 : undefined }];
+    input.totals = tipoDte === 39
+      ? { neto: 9000, iva: 1710, exento: 0, total: 10710, montoNF: 500, totalPeriodo: 11210 }
+      : { neto: 0, iva: 0, exento: 9000, total: 9000, montoNF: 500, totalPeriodo: 9500 };
+    const xml = buildSignedBoletaDte(input, pfxBytes, "pass");
+    const documento = xml.match(/<Documento\b[\s\S]*?<\/Documento>/)?.[0];
+    assert(documento);
+    const digest = xml.match(/<DigestValue>([^<]+)<\/DigestValue>/)?.[1];
+    assertEquals(digest, sha1Base64(documento.replace(/\r\n/g, "\n")));
+    assert(verifyForgeSignature(xml, publicKey));
+    assertStringIncludes(xml, `<MNT>${input.totals.total}</MNT>`);
+    assert(digest !== sha1Base64(documento.replace(/\r\n/g, "\n").replace("<MontoNF>500", "<MontoNF>501")));
+    if (tipoDte === 41) assert(!xml.includes("<IndMntNeto>") && !xml.includes("<IVA>") && !xml.includes("<MntNeto>"));
+  }
+});
