@@ -163,7 +163,13 @@ function readFields(
       observations.push(name + ": campo ausente");
       continue;
     }
-    const item = value[key];
+    let item = value[key];
+    if (
+      name === "trackid" && typeof item === "string" &&
+      /^[+-]?\d+$/.test(item.trim())
+    ) {
+      item = Number(item.trim());
+    }
     if (typeof field === "object" && "items" in field) {
       if (!Array.isArray(item)) {
         observations.push(name + ": se esperaba un arreglo");
@@ -254,6 +260,7 @@ export function parseBoletaStatus(
 
 /**
  * Parsea el estado del envío de boletas, incluyendo estadísticas y errores.
+ * Solo trackid admite conversión de texto decimal a entero seguro.
  * Recupera elementos reconocibles de arreglos mixtos; las posiciones originales
  * se conservan en payload y se identifican en observations. No infiere aceptación.
  */

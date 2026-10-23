@@ -165,7 +165,8 @@ const estado = parseBoletaStatus(respuesta);
 
 Para un envío, usa `getEnvioStatus` y `parseEnvioBoletaStatus`: recupera
 estadísticas y detalle de reparos/rechazos. Los parsers conservan campos nuevos
-en `payload` y códigos nuevos literalmente; no convierten tipos ni buscan
+en `payload` y códigos nuevos literalmente; solo `trackid` convierte texto
+decimal entero a número seguro, sin observaciones si es válido. No buscan
 alias. En arreglos mixtos, `data` contiene los elementos reconocibles; las
 posiciones originales permanecen en `payload` y se indican en las observaciones.
 
