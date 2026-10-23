@@ -190,7 +190,57 @@ Deno.test("estado envío: recupera arreglos mixtos e informa las posiciones orig
   );
 });
 
-Deno.test("estado envío: no convierte tipos ni trunca enteros inseguros", () => {
+Deno.test("estado envío: convierte únicamente trackid sin alterar el original", () => {
+  for (
+    const trackid of [
+      "33275607",
+      " 33275607 ",
+      "+33275607",
+      "033275607",
+      "-33275607",
+      "0",
+    ]
+  ) {
+    const payload = { ...ENVIO, trackid };
+    const raw = JSON.stringify(payload);
+    const result = parseEnvioBoletaStatus({ status: 200, raw });
+    assertEquals(result.data, { ...ENVIO, trackid: Number(trackid) });
+    assertEquals(result.parsing, "complete");
+    assertEquals(result.observations, []);
+    assertEquals(result.raw, raw);
+    assertEquals(result.payload, payload);
+  }
+});
+
+Deno.test("estado envío: rechaza trackid inválido sin truncar ni perder precisión", () => {
+  for (
+    const trackid of [
+      "",
+      " ",
+      "1.5",
+      "1e3",
+      "0x10",
+      "123abc",
+      "9007199254740992",
+      1.5,
+      Number.MAX_SAFE_INTEGER + 1,
+      null,
+      true,
+    ]
+  ) {
+    const payload = { ...ENVIO, trackid };
+    const result = parseEnvioBoletaStatus({
+      status: 200,
+      raw: JSON.stringify(payload),
+    });
+    assert(!("trackid" in result.data));
+    assertEquals(result.parsing, "partial");
+    assertEquals(result.observations, ["trackid: tipo inesperado"]);
+    assertEquals(result.payload, payload);
+  }
+});
+
+Deno.test("estado envío: conserva errores en otros campos al convertir trackid", () => {
   const payload = {
     ...ENVIO,
     estado: "FUT",
@@ -204,7 +254,7 @@ Deno.test("estado envío: no convierte tipos ni trunca enteros inseguros", () =>
   });
   assertEquals(result.parsing, "partial");
   assertEquals(result.data.estado, "FUT");
-  assert(!("trackid" in result.data));
+  assertEquals(result.data.trackid, 1014);
   assert(!("estadistica" in result.data));
   assert(!("detalle_rep_rech" in result.data));
   assertEquals(result.payload, payload);
