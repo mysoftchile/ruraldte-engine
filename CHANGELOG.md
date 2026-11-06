@@ -3,7 +3,7 @@
 Formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) ·
 Versionado [SemVer](https://semver.org/lang/es/).
 
-## [Unreleased] — 2026-10-19
+## [0.6.0]
 
 ### Añadido
 - Boletas: indicador neto 2 para 39, indicador de detalle 1/2 excluyente con
