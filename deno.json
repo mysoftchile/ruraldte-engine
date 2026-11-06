@@ -29,15 +29,19 @@
     "./pkcs12": "./engine/pkcs12.ts",
     "./cert-factura": "./engine/cert-factura.ts",
     "./cert-harness": "./engine/cert-harness.ts",
-    "./cert-ruraldte": "./engine/cert-ruraldte.ts"
+    "./cert-ruraldte": "./engine/cert-ruraldte.ts",
+    "./sii-reclamo": "./engine/sii-reclamo.ts",
+    "./intercambio-extendido": "./engine/intercambio-extendido.ts"
   },
   "publish": {
     "include": [
       "engine/**/*.ts",
       "engine/xsd/**/*.xsd",
+      "engine/xsd/registro-reclamo/*",
       "LICENSE",
       "NOTICE",
-      "README.md"
+      "README.md",
+      "engine/INTERCAMBIO.md"
     ],
     "exclude": ["**/*.test.ts"]
   },
@@ -45,6 +49,7 @@
     "test": "deno test -A engine/",
     "check": "deno check engine/*.ts cert-tools/*.ts",
     "cert:xsd": "deno run -A cert-tools/validate-cert-factura-xsd.ts",
-    "cert:precheck": "deno run -A cert-tools/precheck-cert-factura.ts"
+    "cert:precheck": "deno run -A cert-tools/precheck-cert-factura.ts",
+    "test:intercambio:conformance": "deno run --allow-env --allow-run scripts/test-intercambio-conformance.ts"
   }
 }

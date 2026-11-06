@@ -244,14 +244,22 @@ que ahorran semanas:
 - **Valida contra el XSD antes de emitir en Maullín.** Cada intento gasta un
   folio de certificación, y el SII los entrega de a pocos.
 
+## Aceptación/reclamo y ampliación optativa de intercambio
+
+El export @ruraldte/engine/sii-reclamo agrega las cinco operaciones SOAP.
+El export @ruraldte/engine/intercambio-extendido agrega capacidades XML y
+validaciones propias. El export ./intercambio conserva su implementación y
+comentarios originales. Ver [guía de los módulos nuevos](engine/INTERCAMBIO.md).
+La conformidad adicional se ejecuta con deno task test:intercambio:conformance.
+
 ## Tests
 
 ```bash
-deno task check && deno task test          # 172 tests del motor
+deno task check && deno task test          # 217 tests del motor
 cd pdf-service && npm install && npm test  #  85: PDF + timbre
 ```
 
-257 tests (172 + 85), todos offline. No son de humo: verifican firmas RSA de verdad,
+302 tests (217 + 85), todos offline. No son de humo: verifican firmas RSA de verdad,
 comparan el `<DD>` byte a byte contra el de un proveedor certificado, validan
 contra los XSD v2.5 oficiales del SII y decodifican el PDF417 del PDF de vuelta
 al TED que le dio origen.

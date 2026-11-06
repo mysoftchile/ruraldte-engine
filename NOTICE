@@ -10,6 +10,8 @@ Esquemas XSD del SII (engine/xsd/*.xsd)
 Los archivos bajo `engine/xsd/` son los esquemas oficiales del Servicio de
 Impuestos Internos de Chile (SII), publicados por el propio SII en:
 
+  https://www.sii.cl/servicios_online/docs/xml/schema_ic.zip
+  https://www.sii.cl/servicios_online/docs/xml/schema19983.zip
   https://www.sii.cl/factura_electronica/factura_mercado/schema_dte.zip
   https://www.sii.cl/factura_electronica/factura_mercado/schema_envio_bol.zip
   https://www.sii.cl/factura_electronica/factura_mercado/schema_libro_bol.zip
@@ -50,3 +52,7 @@ Comunidad Rural SpA no es el Servicio de Impuestos Internos ni actúa en su
 representación. Este software no constituye asesoría tributaria. La
 responsabilidad tributaria de los documentos emitidos es siempre del
 contribuyente emisor.
+
+Contrato SOAP oficial SII (engine/xsd/registro-reclamo/*.wsdl y *.xsd)
+Fuente: https://ws2.sii.cl/WSREGISTRORECLAMODTECERT/registroreclamodteservice?wsdl
+La titularidad y condiciones de uso corresponden al SII; no se cubre por Apache-2.0.

@@ -1,3 +1,5 @@
+[Aceptación/reclamo e intercambio: guía vigente](INTERCAMBIO.md).
+
 # RCOF / Consumo de Folios + harness de certificación de boleta
 
 El **RCOF** (Reporte de Consumo de Folios, `<ConsumoFolios>`) es uno de los

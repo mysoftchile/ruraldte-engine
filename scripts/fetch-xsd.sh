@@ -50,3 +50,22 @@ for f in engine/xsd/*.xsd; do
   fi
 done
 [ "$cambios" -eq 0 ] && echo "engine/xsd/: idénticos a la fuente del SII ✓"
+
+
+# Intercambio: dependencias aisladas para no sustituir los tipos de otras familias.
+# Fijadas a los ZIP oficiales revisados; un cambio remoto exige revisar el manifest.
+mkdir -p engine/xsd/intercambio
+for z in schema_ic schema19983; do
+  curl -fsSL "https://www.sii.cl/servicios_online/docs/xml/$z.zip" -o "$TMP/$z.zip"
+  case "$z" in
+    schema_ic) esperado=a97ec9160341b276b5fe07330de72779d90d3d514fd33b40ba4028dc9e0f3f0f ;;
+    schema19983) esperado=61b9e7753fa14df95d094467942964aeb9f55e963429d03cad082fc07f22f577 ;;
+  esac
+  printf '%s  %s\n' "$esperado" "$TMP/$z.zip" | sha256sum -c -
+  unzip -oq "$TMP/$z.zip" -d "$TMP/$z"
+done
+for nombre in RespuestaEnvioDTE_v10.xsd Recibos_v10.xsd EnvioRecibos_v10.xsd SiiTypes_v10.xsd xmldsignature_v10.xsd; do
+  fuente="$TMP/schema19983/$nombre"
+  [ "$nombre" = RespuestaEnvioDTE_v10.xsd ] && fuente="$TMP/schema_ic/$nombre"
+  cp "$fuente" "engine/xsd/intercambio/$nombre"
+done

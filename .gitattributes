@@ -1,0 +1,4 @@
+# Preservar las copias oficiales y sus SHA-256 entre Windows y Linux.
+engine/xsd/intercambio/*.xsd -text
+engine/xsd/registro-reclamo/*.wsdl -text
+engine/xsd/registro-reclamo/*.xsd -text

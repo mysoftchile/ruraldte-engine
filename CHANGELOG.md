@@ -3,6 +3,26 @@
 Formato [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/) ·
 Versionado [SemVer](https://semver.org/lang/es/).
 
+## [Unreleased] — 2026-11-06
+
+### Añadido
+- Export independiente ./sii-reclamo: cinco métodos SOAP con destinos cert/prod,
+  transporte inyectable, timeout y cancelación propios, sin reintentos de escritura.
+- Export optativo ./intercambio-extendido: parser sin pérdida numérica,
+  recepción de múltiples envíos y campos adicionales, sin sustituir ./intercambio.
+- Pruebas explícitas offline de compatibilidad y conformidad XSD, con verificación
+  independiente de todas las firmas. Copias oficiales del contrato SII incluidas en el paquete con su procedencia.
+
+### Corregido
+- El firmador compartido selecciona el SignedInfo recién insertado cuando hay
+  firmas interiores. Corrige firmas exteriores de SetRecibos/AEC; no cambia
+  validaciones, tipos ni defaults de los builders originales.
+- Ruta XSD de la prueba AEC convertida con fileURLToPath para Windows.
+
+Las restricciones del XSD revisado para tipo 43 pertenecen exclusivamente al
+módulo extendido. No se retira su serialización del módulo histórico ni su
+emisión DTE. Sin validación real SII ni publicación de una versión nueva.
+
 ## [0.6.0]
 
 ### Añadido

@@ -1,0 +1,51 @@
+{
+  "retrieved": "2026-11-06",
+  "baseRevision": "c6c97dfe830524cd0b7fabfcbc8313421c88e9a2",
+  "soapContract": "common cert/prod; snapshot retrieved from cert",
+  "sources": [
+    {
+      "url": "https://www.sii.cl/servicios_online/docs/xml/schema_ic.zip",
+      "sha256": "a97ec9160341b276b5fe07330de72779d90d3d514fd33b40ba4028dc9e0f3f0f"
+    },
+    {
+      "url": "https://www.sii.cl/servicios_online/docs/xml/schema19983.zip",
+      "sha256": "61b9e7753fa14df95d094467942964aeb9f55e963429d03cad082fc07f22f577"
+    },
+    {
+      "url": "https://ws2.sii.cl/WSREGISTRORECLAMODTECERT/registroreclamodteservice?wsdl"
+    },
+    {
+      "url": "https://ws2.sii.cl/WSREGISTRORECLAMODTECERT/registroreclamodteservice.xsd2.xsd"
+    }
+  ],
+  "files": [
+    {
+      "path": "engine/xsd/registro-reclamo/registroreclamodteservice.wsdl",
+      "sha256": "a0caa0c65ad3d59191b347fa6f984efc2c4b22b2b160dfa68395778b479357fe"
+    },
+    {
+      "path": "engine/xsd/registro-reclamo/registroreclamodteservice.xsd2.xsd",
+      "sha256": "a50410d3f721e581933f87becde008677a742845dc875f55d92ec44158bea656"
+    },
+    {
+      "path": "engine/xsd/intercambio/EnvioRecibos_v10.xsd",
+      "sha256": "876865a1eb60def5c0109f9568ef4b6dca9301143efcbc727ab4ccc001f604e3"
+    },
+    {
+      "path": "engine/xsd/intercambio/Recibos_v10.xsd",
+      "sha256": "20eaf6f76fa966b90bf2a7bd17f8b373a7fcb6c60f97aae11377cb2999c57605"
+    },
+    {
+      "path": "engine/xsd/intercambio/RespuestaEnvioDTE_v10.xsd",
+      "sha256": "89d1102d2d78133af077651c574a4386299d2a3c3b406f8fe9f16884f27f4f68"
+    },
+    {
+      "path": "engine/xsd/intercambio/SiiTypes_v10.xsd",
+      "sha256": "fb1e48eaff85b6f561348f363c6828cc62867b4dceb5d44c6f852a0c0f53b598"
+    },
+    {
+      "path": "engine/xsd/intercambio/xmldsignature_v10.xsd",
+      "sha256": "427e3225cd379ae92bae464b892dbf964665af92d453ac61774cffab38b95edb"
+    }
+  ]
+}

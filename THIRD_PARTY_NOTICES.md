@@ -24,7 +24,7 @@ dependencias externas, con su licencia. Ninguna es copyleft de contagio.
 
 ## Esquemas del SII
 
-`engine/xsd/*.xsd` son del Servicio de Impuestos Internos, redistribuidos sin
+`engine/xsd/**/*.xsd` son del Servicio de Impuestos Internos, redistribuidos sin
 modificación y **fuera** del alcance de la licencia Apache 2.0 de este
 repositorio. Ver `NOTICE` y `scripts/fetch-xsd.sh`.
 
@@ -34,3 +34,8 @@ repositorio. Ver `NOTICE` y `scripts/fetch-xsd.sh`.
 deno info engine/factura-dte.ts | grep -E 'npm:|jsr:'
 cd pdf-service && npm ls --omit=dev
 ```
+
+Los esquemas de intercambio y contratos SOAP se detallan en engine/INTERCAMBIO.md
+y su manifest de fuentes. La verificación independiente usa xmllint/libxml2
+(herramienta de desarrollo, licencia MIT) y node:crypto de Deno; no hay nueva
+dependencia de ejecución. No se incorpora código de Devlas.

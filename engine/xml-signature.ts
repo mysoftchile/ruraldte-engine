@@ -301,7 +301,15 @@ export function signXmlWithForgeKey(
 
   // Firmar el SignedInfo COMO QUEDÓ EN EL DOCUMENTO (C14N en contexto).
   const fullTree = parseXml(full);
-  const signedInfoEl = fullTree.getElementsByTagName("SignedInfo")[0];
+  // En sobres con firmas interiores, firmar el SignedInfo recién insertado.
+  const values = fullTree.getElementsByTagNameNS(DSIG_NS, "SignatureValue");
+  let signedInfoEl;
+  for (let i = 0; i < values.length; i++) {
+    if (values[i].textContent === PLACEHOLDER) {
+      signedInfoEl = values[i].parentNode.getElementsByTagNameNS(DSIG_NS, "SignedInfo")[0];
+      break;
+    }
+  }
   if (!signedInfoEl) throw new Error("signXmlWithForgeKey: SignedInfo no encontrado");
   const md = forge.md.sha1.create();
   md.update(canonicalize(signedInfoEl), "utf8");

@@ -2,6 +2,7 @@
 // Copyright 2026 Comunidad Rural SpA
 
 // aec.test.ts — estructura del AEC + conformidad XSD (xmllint, guardado si no está).
+import { fileURLToPath } from "node:url";
 import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
 import forge from "npm:node-forge@1.3.1";
 import { buildCertFacturaDtes, type BuildCertFacturaArgs, type FacturaCertCase } from "./cert-factura.ts";
@@ -138,7 +139,7 @@ Deno.test({
     const { bytes } = buildAEC(sampleInput(pfx)); // ISO-8859-1, como lo recibe el SII
     const tmp = await Deno.makeTempFile({ suffix: ".xml" });
     await Deno.writeFile(tmp, bytes);
-    const xsdPath = new URL("./xsd/AEC_v10.xsd", import.meta.url).pathname;
+    const xsdPath = fileURLToPath(new URL("./xsd/AEC_v10.xsd", import.meta.url));
     const { code, stderr } = await new Deno.Command("xmllint", {
       args: ["--noout", "--schema", xsdPath, tmp],
       stdout: "null",
