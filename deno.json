@@ -3,7 +3,11 @@
   "version": "0.6.0",
   "license": "Apache-2.0",
   "nodeModulesDir": "none",
+  "imports": {
+    "node-forge": "npm:node-forge@1.3.1"
+  },
   "exports": {
+    "./sii-rcv": "./engine/sii-rcv.ts",
     ".": "./engine/factura-dte.ts",
     "./boleta": "./engine/boleta-dte.ts",
     "./factura": "./engine/factura-dte.ts",
@@ -46,6 +50,7 @@
     "exclude": ["**/*.test.ts"]
   },
   "tasks": {
+    "test:rcv": "deno test --allow-read engine/sii-rcv.test.ts",
     "test": "deno test -A engine/",
     "check": "deno check engine/*.ts cert-tools/*.ts",
     "cert:xsd": "deno run -A cert-tools/validate-cert-factura-xsd.ts",
