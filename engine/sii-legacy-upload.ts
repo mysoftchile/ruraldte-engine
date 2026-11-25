@@ -66,6 +66,7 @@
 // ============================================================================
 
 import { buildEnvioMultipart, buildSignedToken, type FetchFn, splitRut } from "./sii-client.ts";
+import { parseSafeXml, scalar } from "./xml-utils.ts";
 
 /** Ambiente del canal legacy del SII: `"cert"` apunta a maullin.sii.cl y `"prod"` a palena.sii.cl. */
 export type LegacyEnv = "cert" | "prod";
@@ -468,4 +469,101 @@ export async function getLegacyEnvioStatus(
     : envelopeOutcome;
 
   return { estado, glosa, outcome, breakdown, raw: inner.slice(0, 4000) };
+}
+
+export type LegacyDteStatusInput = {
+  rutConsultante: string;
+  rutEmisor: string;
+  rutReceptor: string;
+  tipoDte: number;
+  folio: number;
+  /** Fecha de emisión en formato YYYY-MM-DD. */
+  fechaEmision: string;
+  montoTotal: number;
+  token: string;
+  userAgent?: string;
+  fetchFn?: FetchFn;
+};
+
+export type LegacyDteStatus = {
+  estado: string;
+  glosa?: string;
+  codigoError?: string;
+  glosaError?: string;
+  numeroAtencion?: string;
+};
+
+/** Consulta un documento individual mediante el SOAP QueryEstDte.jws/getEstDte. */
+export async function getLegacyDteStatus(
+  env: LegacyEnv,
+  input: LegacyDteStatusInput,
+): Promise<LegacyDteStatus> {
+  const url = `${LEGACY_HOSTS[env]}/DTEWS/QueryEstDte.jws`;
+  const consultante = splitRut(input.rutConsultante);
+  const emisor = splitRut(input.rutEmisor);
+  const receptor = splitRut(input.rutReceptor);
+  const [year, month, day] = input.fechaEmision.split("-");
+  const params = {
+    RutConsultante: consultante.rut,
+    DvConsultante: consultante.dv,
+    RutCompania: emisor.rut,
+    DvCompania: emisor.dv,
+    RutReceptor: receptor.rut,
+    DvReceptor: receptor.dv,
+    TipoDte: input.tipoDte,
+    FolioDte: input.folio,
+    FechaEmisionDte: `${day}${month}${year}`,
+    MontoDte: input.montoTotal,
+    Token: input.token,
+  };
+  const args = Object.entries(params).map(([name, value]) =>
+    `<${name} xsi:type="xsd:string">${xmlEscape(String(value))}</${name}>`
+  ).join("");
+  const body = `<m:getEstDte xmlns:m="${url}"` +
+    ' SOAP-ENV:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">' +
+    args + "</m:getEstDte>";
+  const response = await (input.fetchFn ?? fetch)(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/xml; charset=UTF-8",
+      "SOAPAction": "",
+      "User-Agent": input.userAgent ?? LEGACY_USER_AGENT,
+    },
+    body: soapEnvelope(body),
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`QueryEstDte: HTTP ${response.status}.`);
+  }
+
+  const soapNs = "http://schemas.xmlsoap.org/soap/envelope/";
+  const envelope = parseSafeXml(await response.text()).documentElement;
+  const soapBody = envelope?.localName === "Envelope" && envelope.namespaceURI === soapNs
+    ? envelope.getElementsByTagNameNS(soapNs, "Body")[0]
+    : undefined;
+  const result = soapBody?.getElementsByTagNameNS("*", "getEstDteResponse")[0];
+  const returned = result?.getElementsByTagNameNS("*", "getEstDteReturn")[0];
+  const inner = returned && scalar(returned).trim();
+  if (!inner) throw new Error("QueryEstDte: respuesta SOAP sin resultado.");
+
+  const root = parseSafeXml(inner).documentElement;
+  const header = root?.localName === "RESPUESTA"
+    ? root.getElementsByTagNameNS("*", "RESP_HDR")[0]
+    : undefined;
+  const field = (name: string): string | undefined => {
+    const element = header?.getElementsByTagNameNS("*", name)[0];
+    return element ? scalar(element).trim() || undefined : undefined;
+  };
+  const estado = field("ESTADO");
+  // Los estados numéricos del manual son errores de la consulta o de sesión.
+  if (!estado || !/^[a-z][a-z0-9_-]*$/i.test(estado)) {
+    throw new Error("QueryEstDte: el SII no devolvió un estado de documento.");
+  }
+  return {
+    estado,
+    glosa: field("GLOSA") ?? field("GLOSA_ESTADO"),
+    codigoError: field("ERR_CODE"),
+    glosaError: field("GLOSA_ERR"),
+    numeroAtencion: field("NUM_ATENCION"),
+  };
 }

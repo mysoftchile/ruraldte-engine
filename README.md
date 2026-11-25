@@ -57,6 +57,12 @@ dependencias en total (`node-forge` y `@xmldom/xmldom`).
 
 ## Emitir una factura
 
+La exportación `@ruraldte/engine/sii-legacy` incluye `getLegacyDteStatus` para
+verificar un documento por folio mediante el SOAP QueryEstDte. Usa el token
+de `getLegacyToken` del mismo ambiente y los datos del documento emitido.
+El resultado conserva el código individual del SII. Para el seguimiento del
+sobre por TrackID, usa `getLegacyEnvioStatus`.
+
 Emitir son tres pasos, y el motor expone uno por uno: firmar el documento, meterlo
 en un sobre firmado, subirlo al SII.
 
